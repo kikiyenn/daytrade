@@ -12,7 +12,7 @@ import textwrap
 FUGLE_API_KEY = "N2MxMDFmZjUtMzQ4My00Y2RhLTg4ZjgtYTUzNTkzOGVjZTBiIGQ5NzFmYjFlLWFlZjctNDBkNC1hYjAzLTUzNmIzNzljZWZmMg==" 
 # ==========================================
 
-st.set_page_config(page_title="專業當沖看盤系統", layout="wide")
+st.set_page_config(page_title="日內沖一波", layout="wide")
 
 hide_default_format = """
 <style>
@@ -52,17 +52,19 @@ def calculate_td9(df):
     return df
 
 def calculate_indicators(df):
+    # 🌟 修改：統一將 MA13 改為 MA20 (月線)
     df['MA5'] = df['Close'].rolling(window=5).mean()
-    df['MA13'] = df['Close'].rolling(window=13).mean()
+    df['MA20'] = df['Close'].rolling(window=20).mean() 
     
-    df['20MA'] = df['Close'].rolling(window=20).mean()
+    # 布林通道同樣使用 MA20 作為中軌計算基礎
     df['STD'] = df['Close'].rolling(window=20).std()
-    df['BB_Upper'] = df['20MA'] + (2 * df['STD'])
-    df['BB_Lower'] = df['20MA'] - (2 * df['STD'])
+    df['BB_Upper'] = df['MA20'] + (2 * df['STD'])
+    df['BB_Lower'] = df['MA20'] - (2 * df['STD'])
     
+    # 🌟 修改：買賣訊號判定連動改為 MA5 與 MA20 交叉
     df['Signal'] = 0
-    df.loc[(df['MA5'] > df['MA13']) & (df['MA5'].shift(1) <= df['MA13'].shift(1)), 'Signal'] = 1  
-    df.loc[(df['MA5'] < df['MA13']) & (df['MA5'].shift(1) >= df['MA13'].shift(1)), 'Signal'] = -1 
+    df.loc[(df['MA5'] > df['MA20']) & (df['MA5'].shift(1) <= df['MA20'].shift(1)), 'Signal'] = 1  
+    df.loc[(df['MA5'] < df['MA20']) & (df['MA5'].shift(1) >= df['MA20'].shift(1)), 'Signal'] = -1 
     
     df = calculate_td9(df)
     return df
@@ -97,7 +99,6 @@ def get_realtime_price(symbol, use_rt):
             if 'quote' in q:
                 q = q['quote']
             
-            # 🌟 新增：自動抓取股票中文名稱
             name = q.get('name', '')
             
             vol = q.get('total', {}).get('tradeVolume')
@@ -161,7 +162,6 @@ try:
             current_vol = float(today_data['Volume']) if not pd.isna(today_data['Volume']) else 0
             display_name = ""
 
-        # 🌟 終極修正：直接使用 API 給的數字，絕對不再擅自除以 1000
         volume_in_lots = int(current_vol)
         
         yesterday_close = float(yesterday_data['Close'])
@@ -169,11 +169,13 @@ try:
         price_change_pct = (price_change / yesterday_close) * 100
         
         amplitude = ((current_high - current_low) / yesterday_close) * 100
+        
+        # 🌟 修改：抓取 MA20 數值與趨勢
         ma5_val = float(yesterday_data['MA5'])
-        ma13_val = float(yesterday_data['MA13'])
+        ma20_val = float(yesterday_data['MA20'])
         
         ma5_trend = "▲" if ma5_val > df.iloc[-3]['MA5'] else "▼"
-        ma13_trend = "▲" if ma13_val > df.iloc[-3]['MA13'] else "▼"
+        ma20_trend = "▲" if ma20_val > df.iloc[-3]['MA20'] else "▼"
         
         y_high, y_low, y_close = float(yesterday_data['High']), float(yesterday_data['Low']), yesterday_close
         cdp = (y_high + y_low + 2 * y_close) / 4
@@ -193,7 +195,6 @@ try:
 
         current_time_str = datetime.now().strftime("%H:%M:%S")
         
-        # 🌟 新增：在標題加入股票中文名稱 {display_name}
         header_html = textwrap.dedent(f"""
         <div style='display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;'>
             <div><h2 style='margin:0;'>{stock_symbol} {display_name} 即時行情 <span style='font-size:14px; opacity:0.6; font-weight:normal;'>(來源: {data_source} | 更新: {current_time_str})</span></h2></div>
@@ -299,6 +300,7 @@ try:
         td_val = today_data['TD_Setup']
         td_status = f"{int(td_val)}/9 多頭" if td_val > 0 else f"{abs(int(td_val))}/9 空頭" if td_val < 0 else "無"
         
+        # 🌟 修改：圖例連動顯示 MA20
         legend_html = textwrap.dedent(f"""
         <div style="background: rgba(128,128,128,0.05); padding: 12px 20px; border-radius: 8px; margin-bottom: -15px; font-size: 14px; border: 1px solid rgba(128,128,128,0.3);">
             <div style="margin-bottom: 8px;">
@@ -311,7 +313,7 @@ try:
             </div>
             <div style="display:flex; gap: 20px; align-items: center; margin-bottom: 8px;">
                 <span style="color:#F5A623; font-weight:bold;">— MA5</span> <span>{ma5_val:.1f}</span> <span style="color:{'#E8385A' if ma5_trend=='▲' else '#16A34A'};">{ma5_trend}</span>
-                <span style="color:#9B51E0; font-weight:bold;">— MA13</span> <span>{ma13_val:.1f}</span> <span style="color:{'#E8385A' if ma13_trend=='▲' else '#16A34A'};">{ma13_trend}</span>
+                <span style="color:#9B51E0; font-weight:bold;">— MA20</span> <span>{ma20_val:.1f}</span> <span style="color:{'#E8385A' if ma20_trend=='▲' else '#16A34A'};">{ma20_trend}</span>
             </div>
             <div style="display:flex; align-items: center; gap: 15px; flex-wrap: wrap;">
                 <div><span style="color:#E8385A; font-size: 18px;">●</span> 轉多買進</div>
@@ -332,8 +334,9 @@ try:
                                      low=visible_df['Low'], close=visible_df['Close'], name="K線",
                                      increasing_line_color='#E8385A', decreasing_line_color='#16A34A'))
         
+        # 🌟 修改：繪製 MA20 線條
         fig.add_trace(go.Scatter(x=date_labels, y=visible_df['MA5'], line=dict(color='#F5A623', width=1.5), name='MA5'))
-        fig.add_trace(go.Scatter(x=date_labels, y=visible_df['MA13'], line=dict(color='#9B51E0', width=1.5), name='MA13'))
+        fig.add_trace(go.Scatter(x=date_labels, y=visible_df['MA20'], line=dict(color='#9B51E0', width=1.5), name='MA20'))
         fig.add_trace(go.Scatter(x=date_labels, y=visible_df['BB_Upper'], line=dict(color='rgba(155, 81, 224, 0.3)', dash='dot'), name='BB 上軌'))
         fig.add_trace(go.Scatter(x=date_labels, y=visible_df['BB_Lower'], line=dict(color='rgba(155, 81, 224, 0.3)', dash='dot'), name='BB 下軌'))
         
@@ -371,10 +374,12 @@ try:
             paper_bgcolor='rgba(0,0,0,0)',
             font=dict(color='gray'),
             showlegend=False,
+            dragmode='pan',
             xaxis=dict(type='category', nticks=10, gridcolor='rgba(128,128,128,0.15)'),
-            yaxis=dict(gridcolor='rgba(128,128,128,0.15)')
+            yaxis=dict(gridcolor='rgba(128,128,128,0.15)', fixedrange=False) 
         )
-        st.plotly_chart(fig, use_container_width=True)
+        
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'scrollZoom': True})
 
     else:
         st.warning("資料不足，無法計算當沖點位。")
